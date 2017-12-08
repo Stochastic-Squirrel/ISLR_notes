@@ -1,6 +1,7 @@
 library(tidyverse)
 library(ISLR)
 library(gvlma) #found this online. Adds additional diagnostic plots
+library(boot)
 #Question 8-----------
 lm_model <-  lm(data = Auto , mpg ~ horsepower)
 summary(lm_model)
@@ -53,3 +54,55 @@ lm_fit_2_interactions <- lm(mpg~cylinders*displacement+displacement*weight , dat
 #By looking at correlation matrix, try these combinations
 #Also have a look at the notes on formula notation in R
 summary(lm_fit_2_interactions)
+
+
+# We can clearly see non-normal relationship betwen mpg and regressors. Let's try a log transformation
+lm_fit_2_log <- lm(log(mpg)~cylinders*displacement+displacement*weight , data = Auto)
+summary(lm_fit_2_log)
+
+
+#Is this better than the interactions only model?
+#better fit as per adjusted r_squared value
+#other common transformations is sqqrt and polynomial
+
+
+#Question 10---------
+
+carseats_model <- lm(data = Carseats , Sales ~ Price + Urban  + US)
+summary(carseats_model)
+#Carseats sales decrease on average by 0.054 with a one dollar increase in price
+# In urban areas, you sell fewer carseats (although this coefficient is not significant)
+#In the US, you sell more carseats than the rest of the world
+
+#from coefficients, only price and US seem siginificant
+carseats_improved <-  lm(data = Carseats , Sales ~ Price   + US)
+#Get 95% confidence intervals for coefficients 
+confint(carseats_improved)
+#Compare to bootstrap
+boot_fn <- function(data , index){
+  return({
+    coef(lm(data = data , Sales ~ Price   + US , subset= index))
+  })
+}
+boot(Carseats, boot_fn , R =1000)
+
+#Close results
+par('mar')
+par(mar=c(1.5,1.5,1.5,1.5)) #reduces margin size
+plot(gvlma(carseats_improved))
+#Standardised residuals are between -3 and 3 so no sign of major outliers. We would worry if absolute magnitude greater than 3 (proxy to 3 standard deviations for normal dist)
+#Question 11 --------
+
+#Investigate the t-statistic for individual beta coefficients
+set.seed(1)
+x <- rnorm(100)
+y <- 2*x + rnorm(100)
+dat <- data_frame(x=x,y=y)
+
+y_onto_x <- lm (data = dat , y~x -1) #without intercept
+summary(y_onto_x)
+
+x_onto_y<- lm (data = dat , x~y -1) #without intercept
+summary(x_onto_y)
+
+#Results show that the same line is being drawn, subject of formula is just different
