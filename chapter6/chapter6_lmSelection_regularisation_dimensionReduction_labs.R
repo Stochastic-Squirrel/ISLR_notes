@@ -1,6 +1,7 @@
 library(tidyverse)
 library(ISLR)
 library(leaps)# for subset selection
+library(glmnet) # for ridge and lasso regression
 
 
 #Best subset --------
@@ -131,3 +132,44 @@ coef_size_11 <- regsubsets(Salary ~ . , data = Hitters , nvmax = 19) %>% coef(. 
 
 
 #Shrinkage Method: Ridge Regression -----
+  grid <- 10^seq(10,-2,length=100)
+#glmnet requries model matrix for X values and a vector for y
+  x <- model.matrix(Salary~ . , data = Hitters)[,-1]
+  y <- Hitters$Salary
+  ridge_regression <- glmnet(x,y,alpha=0, lambda = grid)
+  
+  #Ridge regression includes ALL coefficients, but will shrink noisy ones to near zero (very small)
+  #look at example coefficients
+  coef(ridge_regression)[,50] #50th model fit
+  
+  #Predict function is quite versatile for glmnet object
+  #instead of predicted Y values, we can predict the Beta coefficients given a new lambda
+  #predict will INTERPOLATE (i.e. make an educated guess) as to the coefficients if that lambda hasn't explicitly been used
+  #therefore if you want exact coefficients, set exact = TRUE , glmnet will need to RETRAIN all of those models with the new lambda value inluded
+  predict(ridge_regression,s=50 ,type="coefficients")[1:20,]
+  
+  set.seed(1)
+  train <- sample(c(TRUE,FALSE),nrow(x), replace =TRUE)  
+  test <- !train  
+
+  test_data <- y[test]  
+  
+  ridge_regression <- glmnet(x = x[train,] , y = y[train] , alpha = 0 , lambda = grid , thresh = 1e-12)
+  ridge_prediction <- predict(ridge_regression, s =4 , newx = x[test,])  
+  test_mse <- mean((ridge_prediction-test_data)^2)  
+  
+  #Use cross validation to choose best Lambda
+  set.seed(1)
+  #REMEMBER ALWAYS use TRAINING DATA for model selection. Therefore allows us to see how useful it really is
+  #when we estimate the test mse
+  
+  #training data contains our training and validation sets. Test data contains our test set!
+  cv.out <- cv.glmnet(x[train,],y[train],alpha =0)
+ plot(cv.out) 
+  best_lambda <- cv.out$lambda.min
+  best_lambda
+
+  #We can make predictions based off of this best lambda , if newx arguent is passed, automattical predicts Y
+  prediction <- predict(ridge_regression, s= best_lambda , newx = x[test,])
+  mean((prediction - test_data)^2)
+  
