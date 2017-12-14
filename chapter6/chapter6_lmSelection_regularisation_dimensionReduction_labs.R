@@ -49,4 +49,85 @@ regfit_forward <- regsubsets(Salary~. , data = Hitters , nvmax=19 ,method = "for
 summary(regfit_forward)
 regfit_backward <- regsubsets(Salary~. , data = Hitters , nvmax=19 ,method = "backward")
 summary(regfit_forward)
-#How to select best set? ---------
+#How to select best set? 
+#Validation Set Approach------
+#remember, we do subset selecction on TRAINING data, this is because we need test data
+#to confirm the appropriatness. We wouldn't get a good estimate of test MSE 
+
+set.seed(1)
+train <- sample(c(TRUE,FALSE), nrow(Hitters) , replace = TRUE)
+test <- !train
+
+regfit_best <- regsubsets(Salary ~ . , data = Hitters[train,] , nvmax = 19)
+
+#We can look at "best" models for each size by RSS
+#Now we create a MODEL MATRIX to be used as a data matrix for the test data
+test_mat <- model.matrix(Salary ~ . , data = Hitters[test,])
+test_mse <- c(numeric(19))
+
+for( i in 1:19){
+  coeffi <- coef(regfit_best,id = i)
+  prediction <- test_mat[,names(coeffi)]%*%coeffi  #multiply data matrix by extracted coefficients
+  test_mse[i] <- mean((Hitters$Salary[test] - prediction)^2)
+}
+
+#View errors
+test_mse
+#find mind
+which.min(test_mse)
+#Model 10 minimises test mse
+#let's look at the model specification
+coef(regfit_best, id = 10)
+
+#Little tedious because there is no predict function within the leaps package
+#Let's write out own one
+predict.regsubsets <- function(object,newdata,id,...){
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form,newdata)
+  coefi <- coef(object , id =id)
+  xvars <- names(coefi)
+  #return this now
+  mat[ , xvars]%*%coefi
+}
+
+#Only use test and training split when you are trying to figure out which model size /class to use
+# Once you have decided that you will use model of size 10, use ALL data to create those models
+#This is because you have already validated it and determined that model size 10 is the most accurate
+
+best_model <- regsubsets(Salary ~ . , data = Hitters , nvmax =19) %>% coef(. ,id=10)
+
+
+
+#K-Fold cross Validation Approach---------
+
+#Little more complicated. Need to perform best subset selection within each K- fold
+k <- 10
+set.seed(1)
+folds <- sample(1:k , nrow(Hitters), replace = TRUE)  
+cv_errors <- matrix(NA,k,19 , dimnames = list(NULL,paste(1:19)))  
+
+#rememnber with k fold , kth fold is test set the other k-1 folds are for training!
+#also we will be using our predict function written previously predict.regsubsets
+for (j in 1:k){
+  best_fit <- regsubsets( Salary ~ . , data = Hitters[folds!=j,] , nvmax =19)
+  
+  #within each fold, calculate MSE
+  for (i in 1:19){
+    pred <- predict(best_fit, Hitters[folds==j,] , id =i) #perform predictions for each model size on test data (the kth fold)
+    cv_errors[j,i] <- mean((Hitters$Salary[folds==j] - pred)^2)
+  }
+  
+}
+
+#Now lets calculate average MSE across all k folds to estimate test MSE
+
+cv_averages <- apply(cv_errors,2,mean)
+par(mfrow=c(1,1))
+plot(cv_averages,type = 'b')  
+#LOWEST POINTS IS AT 11 variable size
+#Therefore, we perform on ALL data, regsubsets to determine what the EXACT size 11 model will look like
+
+coef_size_11 <- regsubsets(Salary ~ . , data = Hitters , nvmax = 19) %>% coef(. , id = 11)
+
+
+#Shrinkage Method: Ridge Regression -----
