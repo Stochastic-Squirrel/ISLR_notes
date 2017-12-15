@@ -2,6 +2,12 @@ library(tidyverse)
 library(ISLR)
 library(leaps)# for subset selection
 library(glmnet) # for ridge and lasso regression
+library(pls) #PCR and PLS regression
+
+#With all of these approaches, we want to perform model size and variable selection on TRAINING data! i.e. cv on training data to figure out which class model is better
+#Then use the test set only for working out a test MSE
+#Finally, use ALL data when specifying the final model in its full form
+
 
 
 #Best subset --------
@@ -169,7 +175,66 @@ coef_size_11 <- regsubsets(Salary ~ . , data = Hitters , nvmax = 19) %>% coef(. 
   best_lambda <- cv.out$lambda.min
   best_lambda
 
-  #We can make predictions based off of this best lambda , if newx arguent is passed, automattical predicts Y
+  #We can make predictions based off of this best lambda , if newx arguent is
+  #passed, automattical predicts Y
   prediction <- predict(ridge_regression, s= best_lambda , newx = x[test,])
   mean((prediction - test_data)^2)
   
+#Shrinkage Method: Lasso Regression ---------
+  
+  # We can see that the choice of lambda is quite important
+  lasso_regression <- glmnet(x[train,],y[train], alpha = 1 , lambda = grid)
+  plot(lasso_regression)  
+  
+  set.seed(1)  
+  cv.out <- cv.glmnet(x[train,],y[train], alpha = 1)  
+  plot(cv.out)    
+  best_lambda <- cvs.out$lambda.min  
+  best_lambda 
+  
+  lasso_prediction <- predict(lasso_regression , s= best_lambda , newx = x[test,] )
+  cat("MSE is now ", mean((lasso_prediction - test_data)^2))
+  
+  #one advantage of lasso over ridge is that it will give less complicated models
+  final_models <- glmnet(x,y,alpha=1,lambda = grid)
+  lasso_coefficients <- predict(final_models , type = "coefficients" , s =best_lambda)  
+  lasso_coefficients[1:20,]  
+  
+#Dimension Reduction: Principal Components Regression--------
+  set.seed(2)
+  pcr_fit <- pcr(Salary ~ . , data = Hitters , scale= T , validation = "CV")  
+  summary(pcr_fit)  
+  #Outputs MSE for all K folds for each no of components used
+  validationplot(pcr_fit, val.type = "MSEP")
+  #Huge improvement when 1 component is used (is 0 OLS????)
+  summary(pcr_fit)
+  
+  #NOW lets look at the TEST MSE (error on unseen data)
+  set.seed(1)
+  pcr_fit <- pcr(Salary ~ . , data = Hitters[train,] , scale= T , validation = "CV")  
+  #Obtain model with lowest CV Mse
+  validationplot(val.type = "MSEP",pcr_fit)
+  #This is when M=7
+  pcr_prediction <- predict(pcr_fit, x[test,],ncomp=7)
+  mean((pcr_prediction - test_data)^2)  
+  
+#Dimension Reduction: Partial Least Squares Regression ------
+  #TRy partial least squares. Creates components which maximises variance in direction of Y variable
+  
+  set.seed(1)
+  pls_fit <- plsr(Salary ~. , data =Hitters , subset = train , scale = T , validation = "CV")  
+  summary(pls_fit)  
+  
+  #lowest cross-validation set MSE when M=2
+  
+  #Now get a COMPLETELY unbiased estimate for the model when M=2
+  prediction_plsr <- predict(pls_fit, x[test,] , ncomp =2)
+  mse_test_pslr <- mean((prediction_plsr-test_data)^2)  
+
+  #OKAY coool we have confirmed that our unbiased test estimate is decent
+  #Now we specifiy the FULL production model using ALL data!!!
+  
+  final_model <- plsr(Salary ~ . , data = Hitters ,ncomp = 2 , scale = T)
+  summary(final_model)  
+  final_model$loadings  
+  #look up what the loading weights are
