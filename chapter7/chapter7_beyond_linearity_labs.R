@@ -3,8 +3,9 @@ library(ISLR)
 library(boot)
 library(splines)
 library(gam)
+library(akima) #Visualising 2D local regression in GAM
 
-#Polynomial Regression and Step Functions ---------------
+#Polynomial Regression and Step Functions 
 polynomial_fit <- lm(wage ~ poly(age,4) , data = Wage)
 #exctract coefficients
 coefficients(summary(polynomial_fit))
@@ -79,7 +80,7 @@ plot(Wage$age,Wage$wage, col ="gray")
 
 
 #natural spline
-natural_spline <- lm(wage~ns(age,df=4), data = Wage) #can either specify number of knots or by degrees of FREEDOM
+natural_spline <- lm(wage~ns(age,df=4), data = Wage) #can either specify number of knots or by degrees of FREEDOM, degrees of freedom for cubic spline is 4 + Knots
 natural_predictions <- predict(natural_spline , newdata = list(age=age_grid),se=T)
 title("natural spline")
 lines(age_grid,natural_predictions$fit,col="red")
@@ -124,3 +125,29 @@ gam_linear_year <- gam(wage~ year + s(age,5) +education , data = Wage)
 
 anova(gam_noyear,gam_linear_year , gam_2 , test = "F")
 #Having linear year is better than not having year. The smoothing spline is not significantly better than a linear function of year!!
+
+#let's look at a summary of one of the models
+summary(gam_2)
+#TODO: read up on how to understand the output of this
+
+
+#You can also add in local regression as a building block to a GAM
+gam_local_regression_single <- gam(wage ~s(year,df=4) + lo(age,span=.7)+education , data =Wage)
+plot(gam_local_regression_single, se =T , col ="blue")
+
+#try interactions with local regression 
+gam_local_regression_interaction <- gam(wage~lo(year,age,span=.5)+ education , data = Wage)
+#Use akima package to visualise this
+par(mfrow=c(1,2))
+plot(gam_local_regression_interaction , se =T)
+
+
+#We can also use gams for LOGISTIC REGRESSION
+gam_logistic <- gam(I(wage>250) ~year + s(age,df=5) + education , family ="binomial" ,  data = Wage)
+par(mfrow=c(1,3))
+plot(gam_logistic ,  se = T , col = "red")
+#Hold on, look at error bars for <HS grad, why are they so big?
+table(Wage$education, I(Wage$wage>250))
+#there are no people earning above that wage in <HS grad, it is screwing up the model and should be excluded
+gam_logistic <- gam(I(wage>250) ~year + s(age,df=5) + education , family ="binomial" ,  data = Wage, subset =(education!="1. < HS Grad"))
+plot(gam_logistic ,  se = T , col = "purple")
