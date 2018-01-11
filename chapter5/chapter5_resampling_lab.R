@@ -67,7 +67,7 @@ for (i in 1:10){
 
 
 #BOOTSTRAP
-alpha_fn <- function( data , index){
+alpha_fn <- function( data , index){ #The metric you want to bootstrap
   
   X <- data$X[index]
   Y <- data$Y[index]
