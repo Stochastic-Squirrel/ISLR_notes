@@ -177,5 +177,76 @@ lines(nox_range , predict(spline_regression,newdata = list(nox=nox_range)), col=
 
 
 
-poly_fits <- map( 1:10, ~ lm(formula=dis~poly(nox,.),data=Boston) )
+poly_fits <- map( 3:10, ~ glm(formula=dis~bs(nox,.),data=Boston) )
+par(mfrow=c(2,2))
+for(i in 3:10){
+  plot(Boston$nox,Boston$dis,col="darkgrey",main=paste0(i," Degree of Freedom Cubic spline"))
+  lines(nox_range , predict(poly_fits[[i-2]],newdata = list(nox=nox_range)), col="red")
+}
+#Display RSS
+map(poly_fits, function(x) sum(x$residuals^2))  %>% unlist()
+#Again, you can see how RSS always decreases with increased model complexity, it is just the training error decreasing
 
+#Now let's use cross validation to pick the best degree of freedom Cubic spline
+cv_errors_spines <- numeric(8)
+for (i in 1:8){
+
+cv_errors[i] <- cv.glm(glmfit = glm(formula=dis~bs(nox,i+2),data=Boston) , K=10 , data = Boston )$delta[2] 
+}
+par(mfrow=c(1,1))
+plot(main="CV error of splines for a given degree of freedom", x = 3:10 , y =cv_errors)
+ #messed up the formula but the process stands
+#Question 11-----------
+#Backfitting Explained
+
+#General Iterative Algorithm: Hold ALL coefficients at there current values and let one coefficient vary
+#Update this coefficient value through simple regression. THen hold that coefficient constant and vary another.
+#Repeat until constants don't change
+
+#Generate Predicted Variable
+x_1 <- rnorm(100)
+x_2 <- rnorm(n = 100 , mean = 50)
+Y <- 5 + 3*x_1 - 20*x_2 + rnorm(100)
+
+#Initialise Beta one etstimate to a value
+beta_1 <- 20
+#Fit model to residual of Y and B1X1
+a <- Y - beta_1*x_1
+beta_2 <- lm(a~x_2)$coef[2]
+#Now we keep Beta_2 fixed and vary beta 1
+a <- Y - beta_2 * x_2
+beta_1 <- lm(a~x_1)$coef[2]
+#Essentially Repeat This until convergence, You want a to approach as close to zero as you can
+#this means you have reached your OLS estimate
+
+estimation_data  <- data_frame(iteration=numeric(1000), beta_0=numeric(1000),beta_1=numeric(1000),beta_2=numeric(1000))
+#Initialise Beta one etstimate to a value
+beta_1 <- 9
+for(i in 1:1000){
+  
+  #load previous estimates
+  if(i>1){
+    beta_1 <- estimation_data$beta_1[i-1]
+    beta_2 <- estimation_data$beta_2[i-1]
+  }
+  
+  #Fit model to residual of Y and B1X1
+  a <- Y - beta_1*x_1
+  beta_2 <- lm(a~x_2)$coef[2]
+  #Now we keep Beta_2 fixed and vary beta 1
+  a <- Y - beta_2 * x_2
+  beta_1 <- lm(a~x_1)$coef[2]
+  
+  #Store Iteration Estimates
+  estimation_data$iteration[i] <- i
+  estimation_data$beta_0[i] <- lm(a~x_1)$coef[1]
+  estimation_data$beta_1[i] <- beta_1
+  estimation_data$beta_2[i] <- beta_2
+}
+
+estimation_long <- gather(estimation_data, value="value",key="coefficient",-iteration)
+ggplot(estimation_long,aes(x=factor(iteration),y=value , col = coefficient)) + geom_point(alpha=.2)  
+#You can see that you get the results pretty much after the first iteration
+#Shows how betas are fit simultaneously
+#Same procedure is done when fitting GAMS
+#Coefficients across all models are fitted at exactly the same time 
